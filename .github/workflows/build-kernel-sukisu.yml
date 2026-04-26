@@ -1,4 +1,4 @@
-name: Build Kernel -- SukiSU Ultra
+name: Build Kernel -- ReSukiSU with susfs
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
       SUKISU_BRANCH:
         description: 'SukiSU 分支名称或修订版'
         required: true
-        default: 'builtin'
+        default: 'susfs-ksud'
 
 jobs:
   build:
@@ -68,14 +68,14 @@ jobs:
           7za x llvm23.0.0-binutils2.45.1_amd64-kernel-arm_static-20260224.7z
           rm llvm23.0.0-binutils2.45.1_amd64-kernel-arm_static-20260224.7z
       
-      - name: Set up SukiSU
+      - name: Set up ReSukiSU
         working-directory: kernel
         run: |
           echo DATE=$(date +%F) >> $GITHUB_ENV
           export BRANCH=${{ inputs.SUKISU_BRANCH }}
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s $BRANCH
+          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s $BRANCH
           cd ./KernelSU
-          export KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 40000 "-" 2815)
+          export KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 30000 "+" 700)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
 

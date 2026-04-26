@@ -59,7 +59,7 @@ jobs:
           7za x llvm23.0.0-binutils2.45.1_amd64-kernel-arm_static-20260224.7z
           rm llvm23.0.0-binutils2.45.1_amd64-kernel-arm_static-20260224.7z
       
-      - name: Set up SukiSU
+      - name: Set up ReSukiSU
         working-directory: kernel
         run: |
           echo DATE=$(date +%F) >> $GITHUB_ENV
