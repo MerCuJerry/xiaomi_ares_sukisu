@@ -1,31 +1,32 @@
-From 6c2186229a358d58d640390e3af4397a2a83ba2a Mon Sep 17 00:00:00 2001
+From a97e1603c43430307e5c71cce384484b4f6874a1 Mon Sep 17 00:00:00 2001
 From: MerCuJerry <mercujerry@gmail.com>
-Date: Wed, 11 Mar 2026 10:45:51 +0800
-Subject: [PATCH] ksu
+Date: Sun, 26 Apr 2026 10:35:24 +0800
+Subject: [PATCH] ksu-susfs
 
 ---
- drivers/input/input.c    | 10 ++++++++++
+ drivers/input/input.c    | 11 +++++++++++
  fs/devpts/inode.c        | 15 +++++++++++++++
- fs/exec.c                | 25 +++++++++++++++++++++++++
+ fs/exec.c                | 24 ++++++++++++++++++++++++
  fs/open.c                | 20 ++++++++++++++++++++
- fs/read_write.c          |  9 +++++++++
- fs/stat.c                | 12 ++++++++++++
+ fs/read_write.c          | 10 ++++++++++
+ fs/stat.c                | 34 ++++++++++++++++++++++++++++++++++
  kernel/reboot.c          | 11 +++++++++++
- kernel/sys.c             |  9 +++++++++
+ kernel/sys.c             |  7 +++++++
  security/selinux/hooks.c | 21 +++++++++++++++++++++
- 9 files changed, 132 insertions(+)
+ 9 files changed, 153 insertions(+)
 
 diff --git a/drivers/input/input.c b/drivers/input/input.c
-index f9f3d6261dc5..85b50d904ef6 100644
+index f9f3d6261..4a6e2a8e9 100644
 --- a/drivers/input/input.c
 +++ b/drivers/input/input.c
-@@ -377,11 +377,21 @@ static int input_get_disposition(struct input_dev *dev,
+@@ -377,11 +377,22 @@ static int input_get_disposition(struct input_dev *dev,
  	return disposition;
  }
  
-+#ifdef CONFIG_KSU
-+extern bool ksu_input_hook __read_mostly;
-+extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
++#ifdef CONFIG_KSU_SUSFS
++extern struct static_key_true ksu_is_input_hook_enabled;
++extern __attribute__((cold)) int ksu_handle_input_handle_event(
++			unsigned int *type, unsigned int *code, int *value);
 +#endif
 +
  static void input_handle_event(struct input_dev *dev,
@@ -34,7 +35,7 @@ index f9f3d6261dc5..85b50d904ef6 100644
  	int disposition = input_get_disposition(dev, type, code, &value);
  
 +#ifdef CONFIG_KSU_SUSFS
-+	if (unlikely(ksu_input_hook))
++	if (static_branch_unlikely(&ksu_is_input_hook_enabled))
 +		ksu_handle_input_handle_event(&type, &code, &value);
 +#endif
 +
@@ -42,7 +43,7 @@ index f9f3d6261dc5..85b50d904ef6 100644
  		add_input_randomness(type, code, value);
  
 diff --git a/fs/devpts/inode.c b/fs/devpts/inode.c
-index 32f6f1c683d9..ee12d0503d1c 100644
+index 32f6f1c68..ee12d0503 100644
 --- a/fs/devpts/inode.c
 +++ b/fs/devpts/inode.c
 @@ -27,6 +27,9 @@
@@ -82,7 +83,7 @@ index 32f6f1c683d9..ee12d0503d1c 100644
  		return NULL;
  	return dentry->d_fsdata;
 diff --git a/fs/exec.c b/fs/exec.c
-index ae0a49517ba9..0ae6e824e064 100644
+index ae0a49517..87293f50c 100644
 --- a/fs/exec.c
 +++ b/fs/exec.c
 @@ -62,6 +62,9 @@
@@ -95,44 +96,43 @@ index ae0a49517ba9..0ae6e824e064 100644
  
  #include <linux/uaccess.h>
  #include <asm/mmu_context.h>
-@@ -1709,6 +1712,17 @@ static int exec_binprm(struct linux_binprm *bprm)
+@@ -1709,6 +1712,16 @@ static int exec_binprm(struct linux_binprm *bprm)
  /*
   * sys_execve() executes a new program.
   */
 +#ifdef CONFIG_KSU_SUSFS
-+extern bool ksu_execveat_hook __read_mostly;
 +extern bool ksu_su_compat_enabled __read_mostly;
-+extern bool susfs_is_sdcard_android_data_decrypted __read_mostly;
++extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
 +extern bool __ksu_is_allow_uid_for_current(uid_t uid);
 +extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 +			void *envp, int *flags);
-+extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
-+				 void *argv, void *envp, int *flags);
++extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
++				void *envp, int *flags);
 +#endif
 +
  static int do_execveat_common(int fd, struct filename *filename,
  			      struct user_arg_ptr argv,
  			      struct user_arg_ptr envp,
-@@ -1722,6 +1736,17 @@ static int do_execveat_common(int fd, struct filename *filename,
+@@ -1722,6 +1735,17 @@ static int do_execveat_common(int fd, struct filename *filename,
  
  	if (IS_ERR(filename))
  		return PTR_ERR(filename);
 +#ifdef CONFIG_KSU_SUSFS
-+	if (likely(susfs_is_current_proc_umounted()) || !ksu_su_compat_enabled) {
++	if (likely(susfs_is_current_proc_umounted()) || !ksu_su_compat_enabled)
 +		goto orig_flow;
-+	}
-+	if (unlikely(ksu_execveat_hook || !susfs_is_sdcard_android_data_decrypted)) {
++
++	if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted))
 +		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-+	} else if ((__ksu_is_allow_uid_for_current(current_uid().val))) {
++	else
 +		ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
-+	}
++
 +orig_flow:
 +#endif
  
  	/*
  	 * We move the actual failure in case of RLIMIT_NPROC excess from
 diff --git a/fs/open.c b/fs/open.c
-index 3b62683fe332..62ebe4f359b3 100644
+index 3b62683fe..62ebe4f35 100644
 --- a/fs/open.c
 +++ b/fs/open.c
 @@ -31,6 +31,9 @@
@@ -177,32 +177,33 @@ index 3b62683fe332..62ebe4f359b3 100644
  		return -EINVAL;
  
 diff --git a/fs/read_write.c b/fs/read_write.c
-index 0da6e4f19d7f..44ad360fbe96 100644
+index 0da6e4f19..5b44e8bbb 100644
 --- a/fs/read_write.c
 +++ b/fs/read_write.c
-@@ -568,11 +568,20 @@ static inline void file_pos_write(struct file *file, loff_t pos)
+@@ -568,11 +568,21 @@ static inline void file_pos_write(struct file *file, loff_t pos)
  		file->f_pos = pos;
  }
  
-+#ifdef CONFIG_KSU
-+extern bool ksu_init_rc_hook __read_mostly;
-+extern __attribute__((cold)) int ksu_handle_sys_read(unsigned int fd);
++#ifdef CONFIG_KSU_SUSFS
++extern struct static_key_true ksu_is_init_rc_hook_enabled;
++extern __attribute__((cold)) void ksu_handle_sys_read(unsigned int fd);
 +#endif
++
  SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
  {
  	struct fd f = fdget_pos(fd);
  	ssize_t ret = -EBADF;
  
-+	
-+#ifdef CONFIG_KSU
-+	if (unlikely(ksu_init_rc_hook))
++#ifdef CONFIG_KSU_SUSFS
++	if (static_branch_unlikely(&ksu_is_init_rc_hook_enabled))
 +		ksu_handle_sys_read(fd);
 +#endif
++
  	if (f.file) {
  		loff_t pos = file_pos_read(f.file);
  		ret = vfs_read(f.file, buf, count, &pos);
 diff --git a/fs/stat.c b/fs/stat.c
-index 0fda4b6b8fb2..8d10fae4139d 100644
+index 0fda4b6b8..a433b8686 100644
 --- a/fs/stat.c
 +++ b/fs/stat.c
 @@ -20,6 +20,9 @@
@@ -215,31 +216,66 @@ index 0fda4b6b8fb2..8d10fae4139d 100644
  
  /**
   * generic_fillattr - Fill in the basic attributes from the inode struct
-@@ -129,6 +132,10 @@ EXPORT_SYMBOL(vfs_getattr);
+@@ -129,6 +132,11 @@ EXPORT_SYMBOL(vfs_getattr);
   *
   * 0 will be returned on success, and a -ve error code if unsuccessful.
   */
 +#ifdef CONFIG_KSU_SUSFS
-+extern bool ksu_init_rc_hook __read_mostly;
++extern struct static_key_true ksu_is_init_rc_hook_enabled;
 +extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
 +#endif // #ifdef CONFIG_KSU_SUSFS
++
  int vfs_statx_fd(unsigned int fd, struct kstat *stat,
  		 u32 request_mask, unsigned int query_flags)
  {
-@@ -142,6 +149,11 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
+@@ -142,12 +150,26 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
  	if (f.file) {
  		error = vfs_getattr(&f.file->f_path, stat,
  				    request_mask, query_flags);
 +#ifdef CONFIG_KSU_SUSFS
-+		if (unlikely(ksu_init_rc_hook)) {
-+			ksu_handle_vfs_fstat(fd, &stat->size);
-+		}
++	if (static_branch_unlikely(&ksu_is_init_rc_hook_enabled))
++		ksu_handle_vfs_fstat(fd, &stat->size);
 +#endif // #ifdef CONFIG_KSU_SUSFS
  		fdput(f);
  	}
  	return error;
+ }
+ EXPORT_SYMBOL(vfs_statx_fd);
+ 
++#ifdef CONFIG_KSU_SUSFS
++extern bool ksu_su_compat_enabled __read_mostly;
++extern bool __ksu_is_allow_uid_for_current(uid_t uid);
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
++extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
++#else
++extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++#endif
++#endif
++
+ /**
+  * vfs_statx - Get basic and extra attributes by filename
+  * @dfd: A file descriptor representing the base dir for a relative filename
+@@ -170,6 +192,18 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
+ 	int error = -EINVAL;
+ 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
+ 
++#ifdef CONFIG_KSU_SUSFS
++	if (likely(susfs_is_current_proc_umounted()) || !ksu_su_compat_enabled) {
++		goto orig_flow;
++	}
++
++	if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val))) {
++		ksu_handle_stat(&dfd, &filename, &flags);
++	}
++
++orig_flow:
++#endif
++
+ 	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
+ 		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
+ 		return -EINVAL;
 diff --git a/kernel/reboot.c b/kernel/reboot.c
-index eea91461e153..fa4bde27c77c 100644
+index eea91461e..fa4bde27c 100644
 --- a/kernel/reboot.c
 +++ b/kernel/reboot.c
 @@ -284,12 +284,23 @@ static DEFINE_MUTEX(reboot_mutex);
@@ -267,7 +303,7 @@ index eea91461e153..fa4bde27c77c 100644
  	/* We only trust the superuser with rebooting the system. */
  	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
 diff --git a/kernel/sys.c b/kernel/sys.c
-index b4862260a924..3722cdd19dde 100644
+index b4862260a..c37152d5c 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
 @@ -598,6 +598,10 @@ SYSCALL_DEFINE1(setuid, uid_t, uid)
@@ -281,20 +317,18 @@ index b4862260a924..3722cdd19dde 100644
  SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
  {
  	struct user_namespace *ns = current_user_ns();
-@@ -610,6 +614,11 @@ SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
+@@ -610,6 +614,9 @@ SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
  	keuid = make_kuid(ns, euid);
  	ksuid = make_kuid(ns, suid);
  
 +#ifdef CONFIG_KSU_SUSFS
-+	if (ksu_handle_setresuid(ruid, euid, suid)) {
-+		pr_info("Something wrong with ksu_handle_setresuid()\\n");
-+	}
++	(void)ksu_handle_setresuid(ruid, euid, suid);
 +#endif
  	if ((ruid != (uid_t) -1) && !uid_valid(kruid))
  		return -EINVAL;
  
 diff --git a/security/selinux/hooks.c b/security/selinux/hooks.c
-index 67699b611022..da7a039cead1 100644
+index 67699b611..da7a039ce 100644
 --- a/security/selinux/hooks.c
 +++ b/security/selinux/hooks.c
 @@ -2430,17 +2430,38 @@ static int check_nnp_nosuid(const struct linux_binprm *bprm,
@@ -337,5 +371,5 @@ index 67699b611022..da7a039cead1 100644
  	 * If the policy enables the nnp_nosuid_transition policy capability,
  	 * then we permit transitions under NNP or nosuid if the
 -- 
-2.53.0
+2.54.0
 
