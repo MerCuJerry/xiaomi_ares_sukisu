@@ -103,7 +103,6 @@ jobs:
         run: |
           patch -p1 < $GITHUB_WORKSPACE/susfs_patch/Patches/Patch/susfs_patch_to_4.14.patch || true
           patch -p1 < $GITHUB_WORKSPACE/Patches/susfs_patch_taskmmu.patch
-          patch -p1 < $GITHUB_WORKSPACE/Patches/fix_error.patch
           if [ "${{ inputs.SOURCECODE_BRANCH }}" = "T" ]; then
             patch -p1 < $GITHUB_WORKSPACE/Patches/susfs_patch_base.patch
             patch -p1 < $GITHUB_WORKSPACE/Patches/susfs_patch_fdinfo.patch
