@@ -13,9 +13,9 @@ on:
         required: true
         default: 'U-dev'
       SUKISU_BRANCH:
-        description: 'SukiSU 分支名称或修订版'
+        description: 'ReSukiSU 分支名称或修订版'
         required: true
-        default: 'susfs-ksud'
+        default: 'main'
 
 jobs:
   build:
@@ -96,7 +96,8 @@ jobs:
       - name: Patch Kernel
         working-directory: kernel
         run: |
-          patch -p1 < $GITHUB_WORKSPACE/Patches/susfs-syscall-hooks.patch
+          patch -p1 < $GITHUB_WORKSPACE/Patches/resukisu-scopemin-hooks.patch
+          patch -p1 < $GITHUB_WORKSPACE/Patches/static-symbol-export.patch
 
       - name: Apply KernelPatch for SUSFS
         working-directory: kernel
@@ -117,6 +118,7 @@ jobs:
             echo "CONFIG_KALLSYMS_ALL=y" >> $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append
             echo "CONFIG_KPM=y" >> $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append
           fi
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append
           cat $GITHUB_WORKSPACE/Patches/ares_user_defconfig_append >> $GITHUB_WORKSPACE/kernel/arch/arm64/configs/ares_user_defconfig
       
       - name: Build Kernel for K40GE
