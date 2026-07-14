@@ -96,8 +96,7 @@ jobs:
       - name: Patch Kernel
         working-directory: kernel
         run: |
-          patch -p1 < $GITHUB_WORKSPACE/Patches/resukisu-scopemin-hooks.patch
-          patch -p1 < $GITHUB_WORKSPACE/Patches/static-symbol-export.patch
+          patch -p1 < $GITHUB_WORKSPACE/Patches/susfs-syscall-hooks.patch
 
       - name: Apply KernelPatch for SUSFS
         working-directory: kernel
