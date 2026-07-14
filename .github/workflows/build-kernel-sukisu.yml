@@ -97,6 +97,7 @@ jobs:
         working-directory: kernel
         run: |
           patch -p1 < $GITHUB_WORKSPACE/Patches/susfs-syscall-hooks.patch
+          patch -p1 < $GITHUB_WORKSPACE/Patches/static-symbol-export.patch
 
       - name: Apply KernelPatch for SUSFS
         working-directory: kernel
